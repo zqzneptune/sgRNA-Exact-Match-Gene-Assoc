@@ -12,12 +12,20 @@ import pyranges as pr # Import pyranges
 
 # --- Configuration ---
 DEFAULT_SGRNA_INPUT_FILE = 'sgrnas.txt'
-DEFAULT_TARGET_GENOME_FASTA = 'E.-coli-K-12-substr.-BW25113_Genome.fasta'
-DEFAULT_GENE_TABLE_FILE = 'E.-coli-K-12-substr.-BW25113_All-genes.txt'
-DEFAULT_OUTPUT_DIR = 'E.-coli-K-12-substr.-BW25113_output'
+
+# BW25113
+# DEFAULT_TARGET_GENOME_FASTA = 'E.-coli-K-12-substr.-BW25113_Genome.fasta'
+# DEFAULT_GENE_TABLE_FILE = 'E.-coli-K-12-substr.-BW25113_All-genes.txt'
+# DEFAULT_OUTPUT_DIR = 'E.-coli-K-12-substr.-BW25113_output'
+
+# MG1655
+DEFAULT_TARGET_GENOME_FASTA = 'E.-coli-K-12-substr.-MG1655_Genome.fasta'
+DEFAULT_GENE_TABLE_FILE = 'E.-coli-K-12-substr.-MG1655_All-genes.txt'
+DEFAULT_OUTPUT_DIR = 'E.-coli-K-12-substr.-MG1655_output'
+
 
 # --- Helper Functions ---
-# (read_sgrnas, read_genome, find_exact_matches remain the same as the previous version)
+# (read_sgrnas, read_genome, read_gene_table, find_exact_matches remain the same)
 def read_sgrnas(filepath):
     """Reads sgRNA sequences from a file, returns a list of unique, valid sequences."""
     print(f"\nReading sgRNA sequences from: {filepath}")
@@ -95,7 +103,7 @@ def read_gene_table(filepath, expected_chromosome):
              sys.exit(1)
 
         print(f"Read {len(genes_df)} rows initially.")
-        print(f"Columns found: {list(genes_df.columns)}")
+        print(f"Columns found: {list(genes_df.columns)}") # Less verbose
 
         # --- Define required original column names ---
         original_required_cols = ["Gene Name", "Accession-1", "Left-End-Position", "Right-End-Position", "Product"]
@@ -109,7 +117,7 @@ def read_gene_table(filepath, expected_chromosome):
             sys.exit(1)
 
         # --- Filter rows with invalid/blank coordinates BEFORE renaming ---
-        print("Filtering rows with invalid/blank coordinate values...")
+        print("Filtering rows with invalid/blank coordinate values...") # Less verbose
         # Convert coordinate columns to numeric, coercing errors (blanks, non-numeric) to NaN
         for col in coord_cols_original:
              # Make a copy to avoid SettingWithCopyWarning if genes_df is a slice
@@ -127,7 +135,7 @@ def read_gene_table(filepath, expected_chromosome):
         if genes_df.empty:
              print("ERROR: No valid gene entries remaining after filtering coordinates.")
              sys.exit(1)
-        else:
+        else: # Less verbose
             print(f"{filtered_rows} rows remaining after coordinate filtering.")
 
         # --- Now safe to convert coordinates to integers and proceed ---
@@ -159,7 +167,7 @@ def read_gene_table(filepath, expected_chromosome):
 
 
         # Assign expected chromosome name
-        print(f"Assigning chromosome name '{expected_chromosome}' to all genes.")
+        print(f"Assigning chromosome name '{expected_chromosome}' to all genes.") # Less verbose
         genes_df_renamed['Chromosome'] = expected_chromosome
 
         # --- Coordinate Conversion (1-based inclusive -> 0-based start, 1-based end) ---
@@ -169,7 +177,7 @@ def read_gene_table(filepath, expected_chromosome):
 
         # Add dummy Strand column (required by pyranges, but info is missing)
         genes_df_renamed['Strand'] = '+' # Or '.'
-        print("WARNING: Gene table lacks Strand information. Using dummy strand '+'. Nearest gene direction cannot be determined relative to gene orientation.")
+        print("WARNING: Gene table lacks Strand information. Using dummy strand '+'. Nearest gene direction cannot be determined relative to gene orientation.") # Less verbose
 
         # Select final columns for PyRanges object
         pr_cols = ['Chromosome', 'Start', 'End', 'Strand', 'Gene_Symbol', 'Locus_Tag', 'Product_Description']
@@ -306,7 +314,7 @@ def main():
                  'Nearest_Downstream_Gene_Symbol', 'Nearest_Downstream_Locus_Tag', 'Nearest_Downstream_Distance']
     for col in gene_cols:
          if col not in all_results_df.columns: # Check if not already added
-            all_results_df[col] = None # Initialize with None
+            all_results_df[col] = pd.NA # Use pandas NA marker
 
     if not match_results:
         print("No sgRNA matches found, skipping gene association.")
@@ -339,7 +347,7 @@ def main():
             # Keep only rows where an actual overlap occurred (check locus tag)
             valid_overlap_sgrnas = overlaps_df.dropna(subset=['Locus_Tag'])['sgRNA_Sequence'].unique()
             overlaps_final_df = overlaps_grouped[overlaps_grouped['sgRNA_Sequence'].isin(valid_overlap_sgrnas)].copy()
-            overlaps_final_df.replace({'': None}, inplace=True) # Replace empty strings after filtering
+            overlaps_final_df.replace({'': pd.NA}, inplace=True) # Use pandas NA
 
             # --- Identify sgRNAs needing nearest search ---
             sgRNAs_with_match = set(matches_df['sgRNA_Sequence'])
@@ -364,33 +372,57 @@ def main():
                         non_overlapping_pr_df['Start'] = non_overlapping_pr_df['Start'] - 1
                         non_overlapping_pr = pr.PyRanges(non_overlapping_pr_df)
 
-                        # --- Find Nearest Upstream ---
-                        print("    - Finding nearest upstream...")
-                        nearest_up_pr = non_overlapping_pr.nearest(genes_pr, direction="upstream", suffix="_gene", overlap=False)
-                        nearest_up_df = nearest_up_pr.df
-                        # Keep only valid upstream results (distance >= 0)
-                        nearest_up_df_filtered = nearest_up_df[nearest_up_df['Distance'] >= 0].copy()
-                        if not nearest_up_df_filtered.empty:
-                            nearest_upstream_final_df = nearest_up_df_filtered.groupby('sgRNA_Sequence').agg(
-                                Nearest_Upstream_Gene_Symbol=('Gene_Symbol_gene', lambda x: ';'.join(x.dropna().astype(str).unique())),
-                                Nearest_Upstream_Locus_Tag=('Locus_Tag_gene', lambda x: ';'.join(x.dropna().astype(str).unique())),
-                                Nearest_Upstream_Distance=('Distance', 'min')
-                            ).reset_index()
-                            nearest_upstream_final_df.replace({'': None}, inplace=True)
+                        # --- Find ONE Nearest (Upstream OR Downstream) ---
+                        print("    - Finding single nearest gene (position will determine up/downstream)...")
+                        # Run nearest once without direction constraint
+                        # Nearest returns distance >= 0 or -1 if none found on chromosome
+                        nearest_pr = non_overlapping_pr.nearest(genes_pr, suffix="_gene", overlap=False)
+                        nearest_df = nearest_pr.df
 
-                        # --- Find Nearest Downstream ---
-                        print("    - Finding nearest downstream...")
-                        nearest_down_pr = non_overlapping_pr.nearest(genes_pr, direction="downstream", suffix="_gene", overlap=False)
-                        nearest_down_df = nearest_down_pr.df
-                        # Keep only valid downstream results (distance >= 0)
-                        nearest_down_df_filtered = nearest_down_df[nearest_down_df['Distance'] >= 0].copy()
-                        if not nearest_down_df_filtered.empty:
-                            nearest_downstream_final_df = nearest_down_df_filtered.groupby('sgRNA_Sequence').agg(
-                                Nearest_Downstream_Gene_Symbol=('Gene_Symbol_gene', lambda x: ';'.join(x.dropna().astype(str).unique())),
-                                Nearest_Downstream_Locus_Tag=('Locus_Tag_gene', lambda x: ';'.join(x.dropna().astype(str).unique())),
-                                Nearest_Downstream_Distance=('Distance', 'min')
-                            ).reset_index()
-                            nearest_downstream_final_df.replace({'': None}, inplace=True)
+                        # Filter out results where no nearest was found on chromosome (Distance == -1)
+                        nearest_df_filtered = nearest_df[nearest_df['Distance'] >= 0].copy()
+
+                        # Initialize empty DataFrames for results
+                        nearest_upstream_final_df = pd.DataFrame()
+                        nearest_downstream_final_df = pd.DataFrame()
+
+                        if not nearest_df_filtered.empty:
+                            # Determine Upstream vs Downstream based on coordinates
+                            # Upstream: gene ends before sgRNA starts (End_gene < Start)
+                            # Downstream: gene starts after sgRNA ends (Start_gene > End)
+                            # Note: Coordinates are 0-based from PyRanges df
+                            is_upstream = nearest_df_filtered['End_gene'] < nearest_df_filtered['Start']
+                            is_downstream = nearest_df_filtered['Start_gene'] > nearest_df_filtered['End']
+
+                            # Separate into upstream and downstream results
+                            nearest_up_df = nearest_df_filtered[is_upstream].copy()
+                            nearest_down_df = nearest_df_filtered[is_downstream].copy()
+
+                            # Aggregate Upstream Results - *** ADD EMPTY CHECK ***
+                            if not nearest_up_df.empty:
+                                nearest_upstream_final_df = nearest_up_df.groupby('sgRNA_Sequence').agg(
+                                    Nearest_Upstream_Gene_Symbol=('Gene_Symbol', lambda x: ';'.join(x.dropna().astype(str).unique())),
+                                    Nearest_Upstream_Locus_Tag=('Locus_Tag', lambda x: ';'.join(x.dropna().astype(str).unique())),
+                                    Nearest_Upstream_Distance=('Distance', 'min')
+                                ).reset_index()
+                                nearest_upstream_final_df.replace({'': pd.NA}, inplace=True)
+                            else:
+                                print("    - No valid nearest upstream genes found.")
+
+
+                            # Aggregate Downstream Results - *** ADD EMPTY CHECK ***
+                            if not nearest_down_df.empty:
+                                nearest_downstream_final_df = nearest_down_df.groupby('sgRNA_Sequence').agg(
+                                    Nearest_Downstream_Gene_Symbol=('Gene_Symbol', lambda x: ';'.join(x.dropna().astype(str).unique())),
+                                    Nearest_Downstream_Locus_Tag=('Locus_Tag', lambda x: ';'.join(x.dropna().astype(str).unique())),
+                                    Nearest_Downstream_Distance=('Distance', 'min')
+                                ).reset_index()
+                                nearest_downstream_final_df.replace({'': pd.NA}, inplace=True)
+                            else:
+                                print("    - No valid nearest downstream genes found.")
+                        else:
+                            print("    - No nearest genes found (Distance >= 0) for non-overlapping sgRNAs.")
+
                     else:
                          print("    - No valid coordinates for non-overlapping sgRNAs after filtering.")
                 else:
@@ -426,6 +458,7 @@ def main():
         numeric_cols_to_convert = ['Start', 'End', 'Nearest_Upstream_Distance', 'Nearest_Downstream_Distance']
         for col in numeric_cols_to_convert:
             if col in all_results_df.columns:
+                # Use pd.NA for consistency
                 all_results_df[col] = pd.to_numeric(all_results_df[col], errors='coerce').astype('Int64')
 
         # Define dictionary for filling NAs in string columns
@@ -438,13 +471,16 @@ def main():
         }
         # Apply fillna only for columns that exist in the dataframe AND are in our string fill dict
         cols_to_fill_strings = {k: v for k, v in string_fill_dict.items() if k in all_results_df.columns}
+        # Use pd.NA marker for Int64 columns before converting to string
+        na_marker = pd.NA
         all_results_df.fillna(cols_to_fill_strings, inplace=True)
 
-        # Convert Int64 columns to string *now*, replacing pd.NA
+
+        # Convert Int64 columns to string *now*, replacing pd.NA marker explicitly
         int_cols_to_str = ['Start', 'End', 'Nearest_Upstream_Distance', 'Nearest_Downstream_Distance']
         for col in int_cols_to_str:
              if col in all_results_df.columns:
-                  # astype(str) converts pd.NA in Int64 to '<NA>' string
+                  # Convert to string, replacing pandas' NA representation (<NA>) with 'N/A'
                   all_results_df[col] = all_results_df[col].astype(str).replace('<NA>', 'N/A')
 
 
@@ -559,7 +595,7 @@ geneD\tBW_004\t5220\t5320\tFourth dummy gene on chr2
               f.write(dummy_genome_part1 + "\n")
               f.write(">Dummy_Chr2\n") # Script currently assumes single chrom from FASTA, gene association won't use this unless modified
               # GCCACAGCCACATTCATTCT -> (coords 5091-5110) -> Overlaps geneC (5070-5170) YES
-              # TAAAGCCCAGAATGAATGTG -> revcomp CACATT... (coords 5161-5180) -> Nearest upstream: geneC (dist ~ -10 -> 0), Nearest downstream: geneD (dist ~ 39)
+              # TAAAGCCCAGAATGAATGTG -> revcomp CACATT... (coords 5161-5180) -> Nearest upstream: geneC (dist ~ 0), Nearest downstream: geneD (dist ~ 39)
               # INTERGENIC_SEQUENCE_2 (coords 5231-5250) -> Nearest upstream: geneD (dist ~ 10), Nearest downstream: None
               dummy_genome_part2 = "N"*5090 + "GCCACAGCCACATTCATTCT" + "N"*50 + \
                                    "TAAAGCCCAGAATGAATGTG" + "N"*50 + \
