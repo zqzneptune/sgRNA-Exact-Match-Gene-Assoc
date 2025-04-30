@@ -10,20 +10,6 @@ import time # To measure execution time
 import numpy as np # For NaN checking potentially
 import pyranges as pr # Import pyranges
 
-# --- Configuration ---
-DEFAULT_SGRNA_INPUT_FILE = 'sgrnas.txt'
-
-# BW25113
-# DEFAULT_TARGET_GENOME_FASTA = 'E.-coli-K-12-substr.-BW25113_Genome.fasta'
-# DEFAULT_GENE_TABLE_FILE = 'E.-coli-K-12-substr.-BW25113_All-genes.txt'
-# DEFAULT_OUTPUT_DIR = 'E.-coli-K-12-substr.-BW25113_output'
-
-# MG1655
-DEFAULT_TARGET_GENOME_FASTA = 'E.-coli-K-12-substr.-MG1655_Genome.fasta'
-DEFAULT_GENE_TABLE_FILE = 'E.-coli-K-12-substr.-MG1655_All-genes.txt'
-DEFAULT_OUTPUT_DIR = 'E.-coli-K-12-substr.-MG1655_output'
-
-
 # --- Helper Functions ---
 # (read_sgrnas, read_genome, read_gene_table, find_exact_matches remain the same)
 def read_sgrnas(filepath):
@@ -235,14 +221,14 @@ def find_exact_matches(sgrna_seq, genome_sequences):
 # --- Main Execution ---
 def main():
     parser = argparse.ArgumentParser(description="Find exact matches of sgRNA sequences in a target genome and associate with overlapping/nearest genes using a custom table.")
-    parser.add_argument("-s", "--sgrna_file", default=DEFAULT_SGRNA_INPUT_FILE,
-                        help=f"Input file containing sgRNA sequences, one per line (default: {DEFAULT_SGRNA_INPUT_FILE})")
-    parser.add_argument("-g", "--genome_file", default=DEFAULT_TARGET_GENOME_FASTA,
-                        help=f"Input FASTA file for the target genome (default: {DEFAULT_TARGET_GENOME_FASTA})")
-    parser.add_argument("-a", "--gene_table_file", default=DEFAULT_GENE_TABLE_FILE, # Changed argument name
-                        help=f"Input gene annotation table file (CSV/TSV) for the target genome (default: {DEFAULT_GENE_TABLE_FILE})")
-    parser.add_argument("-o", "--output_dir", default=DEFAULT_OUTPUT_DIR,
-                        help=f"Directory to save output files (default: {DEFAULT_OUTPUT_DIR})")
+    parser.add_argument("-s", "--sgrna_file", required=True,
+                        help=f"Input file containing sgRNA sequences, one per line")
+    parser.add_argument("-g", "--genome_file", required=True,
+                        help=f"Input FASTA file for the target genome")
+    parser.add_argument("-a", "--gene_table_file", required=True,
+                        help=f"Input gene annotation table file (CSV/TSV) for the target genome")
+    parser.add_argument("-o", "--output_dir", required=True,
+                        help=f"Directory to save output files")
 
     args = parser.parse_args()
 
@@ -533,78 +519,4 @@ def main():
     print(f"Results saved in directory: {output_dir}")
 
 if __name__ == "__main__":
-    # --- Example sgRNAs --- (Same as before)
-    example_sgrnas_text = """
-    GGAAGGGGTGGCTTCGAGCGT
-    GATCGCCGGAACGTTCACACA
-    CCGGAGGTTCGCCGGGAAGG
-    ACTTCCGTGCCATCAATAAA
-    GCCACAGCCACATTCATTCT
-    CACATTCATTCTGGGCTTTA
-    GAGATTAATTAGCGACTGTT
-    ATTTTACCTGAACCATAAT
-    GATACGAAACCATTGTTGAC
-    GCTGGGAGTTGGTGCTGGAT
-    TCGCTTCCGGCGTGGCAAAG
-    TGATCTGCTCGGCCTGTTCC
-    GAAGTTGTAGAGACGCACAC
-    TTCCATTATCGAACGACAAT
-    GGAACATCCAGATGGAAATA
-    CAGCCGCATCGCGCCGGCA
-    TGCCAGCTTTTCGGCATTTG
-    GCAAAAGCCTGCGGGAGAAA
-    CAGCGTACCGAAGCGCAAGC
-    INTERGENIC_SEQUENCE_1
-    INTERGENIC_SEQUENCE_2
-    NOT_IN_GENOME_SEQUENCE
-    INVALIDSEQUENCE###INVALID
-    """
-
-    # --- Dummy Gene Table Content ---
-    # Using tab separation (.tsv) as default
-    dummy_table_text = """Gene Name\tAccession-1\tLeft-End-Position\tRight-End-Position\tProduct
-geneA\tBW_001\t150\t250\tFirst dummy gene
-geneB\tBW_002\t300\t400\tSecond dummy gene, opposite strand conceptually
-#geneX\tBW_XXX\tBAD\tBAD\tCommented out gene with bad coords
-geneE\tBW_005\t\t600\tGene with blank start
-geneF\tBW_006\t700\t\tGene with blank end
-geneG\tBW_007\t800.5\t900\tGene with float start
-geneH\tBW_008\t1000\t950\tGene with start > end
-geneI\tBW_009\t0\t50\tGene with 0 start (becomes -1)
-geneC\tBW_003\t5070\t5170\tThird dummy gene on chr2
-geneD\tBW_004\t5220\t5320\tFourth dummy gene on chr2
-""" # Added more invalid/edge cases
-
-    # Create dummy input files if they don't exist
-    if not os.path.exists(DEFAULT_SGRNA_INPUT_FILE):
-        print(f"Creating dummy input file: {DEFAULT_SGRNA_INPUT_FILE}")
-        with open(DEFAULT_SGRNA_INPUT_FILE, "w") as f: f.write(example_sgrnas_text)
-
-    # Create dummy genome (adjust sequence names if necessary)
-    # Make sure chromosome names match what read_gene_table will use (e.g., 'Dummy_Chr1')
-    if not os.path.exists(DEFAULT_TARGET_GENOME_FASTA):
-         print(f"Creating dummy target genome file: {DEFAULT_TARGET_GENOME_FASTA}")
-         with open(DEFAULT_TARGET_GENOME_FASTA, "w") as f:
-              f.write(">Dummy_Chr1\n") # MUST match chromosome name assumption
-              # ACGCTCGAAGCCACCCCTTCC -> revcomp GGAAGG... (coords 121-141 approx) -> Nearest upstream: None, Nearest downstream: geneA (dist ~ 8)
-              # TGTGTGAACGTTCCGGCGATC -> revcomp GATCGC... (coords 182-202 approx) -> Nearest upstream: geneA (dist ~ 31), Nearest downstream: geneB (dist ~ 97)
-              # INTERGENIC_SEQUENCE_1 (coords 162-181 approx) -> Nearest upstream: geneA (dist ~ 11), Nearest downstream: geneB (dist ~ 118)
-              dummy_genome_part1 = "N"*120 + "ACGCTCGAAGCCACCCCTTCC" + "N"*20 + \
-                                   "INTERGENIC_SEQUENCE_1" + "N"*20 + \
-                                   "TGTGTGAACGTTCCGGCGATC" + "N"*4500 # Pad to ensure coordinates for Chr2 are distinct
-              f.write(dummy_genome_part1 + "\n")
-              f.write(">Dummy_Chr2\n") # Script currently assumes single chrom from FASTA, gene association won't use this unless modified
-              # GCCACAGCCACATTCATTCT -> (coords 5091-5110) -> Overlaps geneC (5070-5170) YES
-              # TAAAGCCCAGAATGAATGTG -> revcomp CACATT... (coords 5161-5180) -> Nearest upstream: geneC (dist ~ 0), Nearest downstream: geneD (dist ~ 39)
-              # INTERGENIC_SEQUENCE_2 (coords 5231-5250) -> Nearest upstream: geneD (dist ~ 10), Nearest downstream: None
-              dummy_genome_part2 = "N"*5090 + "GCCACAGCCACATTCATTCT" + "N"*50 + \
-                                   "TAAAGCCCAGAATGAATGTG" + "N"*50 + \
-                                   "INTERGENIC_SEQUENCE_2" + "N"*50
-              f.write(dummy_genome_part2 + "\n")
-
-    # Create dummy gene table file
-    if not os.path.exists(DEFAULT_GENE_TABLE_FILE):
-        print(f"Creating dummy gene table file: {DEFAULT_GENE_TABLE_FILE}")
-        with open(DEFAULT_GENE_TABLE_FILE, "w") as f: f.write(dummy_table_text)
-
     main()
