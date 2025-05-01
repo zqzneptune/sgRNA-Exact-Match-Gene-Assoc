@@ -6,7 +6,6 @@ This Python script identifies exact sequence matches for a list of sgRNA sequenc
 
 For sgRNAs that have an exact match in the genome, the script further associates them with gene features based on a provided gene annotation table. It identifies:
 1.  **Overlapping Genes:** Genes whose coordinates directly overlap the sgRNA match location.
-2.  **Nearest Genes:** For sgRNAs landing in intergenic regions, it finds the single closest gene upstream and the single closest gene downstream along the chromosome coordinates.
 
 The script outputs a detailed CSV report summarizing the match status and gene associations for each input sgRNA, as well as a summary plot showing the number of sgRNAs found in the genome.
 
@@ -96,14 +95,8 @@ The script generates the following files in the specified output directory (`-o`
     *   Filters the search results to include only sgRNAs that were found in the genome.
     *   Converts the sgRNA match locations into a `pyranges.PyRanges` object.
     *   **Overlaps:** Uses `sgrna_pr.join(genes_pr)` to efficiently find all genes that overlap with each sgRNA's genomic location. Results are aggregated if an sgRNA overlaps multiple genes.
-    *   **Nearest:**
-        *   Identifies sgRNAs that did *not* overlap any gene.
-        *   Uses `non_overlapping_pr.nearest(genes_pr, overlap=False)` to find the single closest gene feature (regardless of direction initially).
-        *   Filters out results where no gene was found on the same chromosome (`Distance = -1`).
-        *   **Post-processes** the nearest results by comparing the sgRNA coordinates (`Start`, `End`) with the nearest gene's coordinates (`Start_gene`, `End_gene`) to determine if the closest gene is upstream (`End_gene <= Start`) or downstream (`Start_gene >= End`).
-        *   Separately aggregates the upstream and downstream nearest gene information.
+    
 7.  **Report Generation (`main` function logic):**
-    *   Merges the initial search results (all sgRNAs) with the overlap results and the separate nearest upstream/downstream results using `pandas.merge`.
     *   Initializes and formats all output columns, ensuring consistent handling of missing data (represented as 'N/A' in the final CSV). Uses `pandas` nullable integer types (`Int64`) internally to handle missing numeric data correctly before final string conversion.
     *   Saves the final, ordered DataFrame to a CSV file.
 8.  **Plotting (`main` function logic):** Uses `matplotlib` to generate a simple bar plot summarizing the count of found vs. not-found sgRNAs.
@@ -114,4 +107,4 @@ The script generates the following files in the specified output directory (`-o`
 *   **Single Chromosome Assumption for Gene Table:** The script currently assumes all coordinates in the gene table file refer to the *first* sequence entry found in the provided genome FASTA file. If your genome has multiple chromosomes/contigs *and* your gene table contains coordinates relative to different sequences, the gene association results will be incorrect for genes not on that first sequence.
 *   **Gene Table Format:** The script strictly expects the specified column headers in the gene table file. The coordinate columns (`Left-End-Position`, `Right-End-Position`) are assumed to be 1-based inclusive.
 *   **Gene Table Strand:** The current implementation assumes the gene table lacks strand information and assigns a dummy '+' strand. Therefore, the determination of "upstream" and "downstream" is purely based on genomic coordinates, not gene orientation.
-*   **Performance:** Exact string matching is generally fast. Reading large genomes and performing `pyranges` operations (join, nearest) are the potentially more time-consuming steps, but `pyranges` is highly optimized for these tasks.
+*   **Performance:** Exact string matching is generally fast. Reading large genomes and performing `pyranges` operations (join) are the potentially more time-consuming steps, but `pyranges` is highly optimized for these tasks.
