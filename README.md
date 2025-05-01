@@ -76,13 +76,7 @@ The script generates the following files in the specified output directory (`-o`
         *   `Strand_Match`: Strand of the genome where the match occurred ('+' for forward, '-' for reverse complement). 'N/A' if no match.
         *   `Overlapping_Gene_Symbol`: Symbol(s) of gene(s) directly overlapping the sgRNA match. Multiple separated by ';'. 'N/A' if no overlap.
         *   `Overlapping_Locus_Tag`: Locus tag(s) of overlapping gene(s). Multiple separated by ';'. 'N/A' if no overlap.
-        *   `Overlapping_Product_Description`: Product description(s) of overlapping gene(s). 'N/A' if no overlap.
-        *   `Nearest_Upstream_Gene_Symbol`: Symbol of the closest gene ending *before* the sgRNA match starts. 'N/A' if none found or if sgRNA overlaps.
-        *   `Nearest_Upstream_Locus_Tag`: Locus tag of the nearest upstream gene. 'N/A' if none found or if sgRNA overlaps.
-        *   `Nearest_Upstream_Distance`: Distance (bp) from the sgRNA start to the nearest upstream gene end. 'N/A' if none found or if sgRNA overlaps.
-        *   `Nearest_Downstream_Gene_Symbol`: Symbol of the closest gene starting *after* the sgRNA match ends. 'N/A' if none found or if sgRNA overlaps.
-        *   `Nearest_Downstream_Locus_Tag`: Locus tag of the nearest downstream gene. 'N/A' if none found or if sgRNA overlaps.
-        *   `Nearest_Downstream_Distance`: Distance (bp) from the sgRNA end to the nearest downstream gene start. 'N/A' if none found or if sgRNA overlaps.
+        *   `Overlapping_Product_Description`: Product description(s) of overlapping gene(s). 'N/A' if no overlap.        
 
 2.  **Summary Plot (`<sgrna_basename>_match_summary.png`)**:
     *   A simple bar chart visualizing the total number of unique sgRNAs that had an exact match ('Found') versus those that did not ('Not Found') in the target genome.
